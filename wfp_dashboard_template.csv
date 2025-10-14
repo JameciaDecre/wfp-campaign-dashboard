@@ -1,0 +1,7 @@
+date,campaign_name,district,precinct_id,precinct_name,pass_number,contact_method,attempts,target_attempts
+2025-10-01,WFP Fall GOTV,2,P-0201,Precinct 201,1,Door,45,120
+2025-10-01,WFP Fall GOTV,2,P-0201,Precinct 201,1,Phone,35,120
+2025-10-01,WFP Fall GOTV,3,P-0305,Precinct 305,1,Door,20,90
+2025-10-02,WFP Fall GOTV,3,P-0305,Precinct 305,1,Text,15,90
+2025-10-02,WFP Fall GOTV,7,P-0702,Precinct 702,2,Door,60,100
+2025-10-02,WFP Fall GOTV,7,P-0702,Precinct 702,2,Phone,25,100
