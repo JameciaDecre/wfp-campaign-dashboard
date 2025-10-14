@@ -1,9 +1,15 @@
+# Write a drop-in replacement Streamlit app WITHOUT campaign_name
+# and generate a matching CSV template.
+
+import pandas as pd
+
+app_code = """
 import streamlit as st
 import pandas as pd
 import numpy as np
 
 # ------------------------------
-# WFP Campaign Dashboard (no precincts)
+# WFP Campaign Dashboard (no campaign_name, no precincts)
 # ------------------------------
 
 st.set_page_config(page_title="WFP Campaign Dashboard", layout="wide")
@@ -11,7 +17,7 @@ st.title("WFP Campaign Dashboard")
 
 st.caption(
     "Upload a tidy CSV with columns: "
-    "`date, campaign_name, district, pass_number, contact_method, attempts, target_attempts`. "
+    "`date, district, pass_number, contact_method, attempts, target_attempts`. "
     "Dates should be YYYY-MM-DD."
 )
 
@@ -36,7 +42,7 @@ def map_tier(d):
 def load_data(file):
     df = pd.read_csv(file)
     required = [
-        "date", "campaign_name", "district", "pass_number",
+        "date", "district", "pass_number",
         "contact_method", "attempts", "target_attempts"
     ]
     missing = [c for c in required if c not in df.columns]
@@ -47,7 +53,13 @@ def load_data(file):
     for c in ["district", "pass_number", "attempts", "target_attempts"]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     df["tier"] = df["district"].apply(map_tier)
-    df["contact_method"] = df["contact_method"].astype(str).strip().str.title()
+    df["contact_method"] = (
+        df["contact_method"]
+          .astype("string")
+          .str.strip()
+          .str.title()
+          .fillna("Unknown")
+    )
     return df
 
 if uploaded is None:
@@ -144,3 +156,31 @@ st.download_button(
 )
 
 st.caption("Tiers auto-assigned from districts — Tier 1: {2,5,7,8}; Tier 2: {3,4,6,9,10,11,12}; others → Unassigned.")
+"""
+
+with open("/mnt/data/wfp_campaign_dashboard_app.py", "w") as f:
+    f.write(app_code)
+
+# Create a matching CSV template (no campaign_name)
+rows = [
+    ["2025-10-01",2,1,"Door",45,320],
+    ["2025-10-01",2,1,"Phone",35,320],
+    ["2025-10-02",5,1,"Text",28,250],
+    ["2025-10-03",7,2,"Door",60,280],
+    ["2025-10-03",7,2,"Phone",25,280],
+    ["2025-10-04",8,2,"Text",30,300],
+    ["2025-10-01",3,1,"Door",20,260],
+    ["2025-10-02",3,1,"Text",15,260],
+    ["2025-10-02",4,1,"Door",22,240],
+    ["2025-10-02",6,1,"Phone",18,275],
+    ["2025-10-03",9,2,"Door",34,310],
+    ["2025-10-03",10,2,"Phone",26,290],
+    ["2025-10-04",11,2,"Text",19,305],
+    ["2025-10-04",12,2,"Door",33,315],
+]
+cols = ["date","district","pass_number","contact_method","attempts","target_attempts"]
+df = pd.DataFrame(rows, columns=cols)
+csv_path = "/mnt/data/wfp_dashboard_template_no_campaign.csv"
+df.to_csv(csv_path, index=False)
+
+csv_path
