@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
 # ---------------------------------------
 # WFP Campaign Dashboard — District Attempts & Support IDs
@@ -10,22 +11,23 @@ st.set_page_config(page_title="WFP Campaign Dashboard", layout="wide")
 st.title("WFP Campaign Dashboard — District Attempts & Support IDs")
 
 st.caption(
-    "This app expects a CSV with columns: "
-    "`district, tier, attempts, target_doors, 1, 2, 3, 4, 5`. "
-    "Replace the CSV in the repo (named `dashboard_wfp_template.csv`) **or** upload one below."
+    "This app reads a CSV committed in the repo (no uploads needed).\n"
+    "Expected columns: `district, tier, attempts, target_doors, 1, 2, 3, 4, 5`."
 )
 
-# Optional uploader (overrides repo file if used)
-uploaded = st.file_uploader("Upload CSV (optional)", type=["csv"])
-DEFAULT_PATH = "dashboard_wfp_template.csv"  # keep this filename in your repo root
+CSV_PATH = Path("dashboard_wfp_template.csv")  # keep this filename at repo root
 
 def coerce_int_series(s: pd.Series) -> pd.Series:
     # strip commas/spaces, coerce to number
     return pd.to_numeric(s.astype(str).str.replace(",", "", regex=False).str.strip(), errors="coerce")
 
 @st.cache_data
-def load_data(file_or_path):
-    df = pd.read_csv(file_or_path)
+def load_data(path: Path):
+    if not path.exists():
+        raise FileNotFoundError(
+            f"CSV not found at '{path}'. Commit a file named 'dashboard_wfp_template.csv' to the repo root."
+        )
+    df = pd.read_csv(path)
     required = ["district", "tier", "attempts", "target_doors", "1", "2", "3", "4", "5"]
     missing = [c for c in required if c not in df.columns]
     if missing:
@@ -44,11 +46,11 @@ def load_data(file_or_path):
     df["penetration"] = (df["attempts"] / df["target_doors"]).replace([np.inf, -np.inf], np.nan).clip(upper=1.0)
     return df
 
-# Choose data source
+# Load once per session
 try:
-    df = load_data(uploaded if uploaded is not None else DEFAULT_PATH)
+    df = load_data(CSV_PATH)
 except Exception as e:
-    st.error(f"Could not load data: {e}")
+    st.error(str(e))
     st.stop()
 
 # Sidebar filters
@@ -106,4 +108,4 @@ st.download_button(
     mime="text/csv"
 )
 
-st.caption("To update, commit a new `dashboard_wfp_template.csv` to your repo (same columns) or use the uploader.")
+st.caption("To update the dashboard, commit a new 'dashboard_wfp_template.csv' (same columns) to this repo.")
