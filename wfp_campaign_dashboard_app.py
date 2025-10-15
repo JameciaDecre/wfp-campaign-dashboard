@@ -2,6 +2,36 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import os  # debug only
+
+st.set_page_config(page_title="WFP Campaign Dashboard", layout="wide")
+st.title("WFP Campaign Dashboard — District Attempts & Support IDs")
+
+st.caption(
+    "This app reads a CSV committed in the repo (no uploads needed). "
+    "Expected columns: `district, tier, attempts, target_doors, 1, 2, 3, 4, 5`."
+)
+
+# >>> Robust path: CSV sits NEXT TO this app file (works even if CWD shifts)
+CSV_PATH = Path(__file__).resolve().parent / "dashboard_wfp_template.csv"
+# If you keep it in a folder, use this instead:
+# CSV_PATH = Path(__file__).resolve().parent / "data" / "dashboard_wfp_template.csv"
+
+# --- TEMP DEBUG: shows exactly what Streamlit sees. Remove after it works. ---
+st.subheader("Debug (temporary)")
+st.code(f"App dir: {Path(__file__).resolve().parent}")
+st.code(f"CWD: {Path.cwd()}")
+st.code(f"Expecting CSV at: {CSV_PATH} — exists? {CSV_PATH.exists()}")
+try:
+    st.code("Files in app dir: " + ", ".join(sorted(os.listdir(Path(__file__).resolve().parent))[:50]))
+except Exception as _e:
+    st.code(f"Could not list app dir: {_e}")
+# ---------------------------------------------------------------------------
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+from pathlib import Path
 
 # ---------------------------------------
 # WFP Campaign Dashboard — District Attempts & Support IDs
