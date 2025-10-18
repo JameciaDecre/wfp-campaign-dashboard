@@ -16,7 +16,8 @@ st.caption(
 
 APP_DIR = Path(__file__).resolve().parent
 DEFAULT_NAME = "dashboard_wfp_template.csv"
-CSV_PATH = APP_DIR / DEFAULT_NAME
+CSV_PATH = Path(__file__).resolve().parent / "dashboard_wfp_template.csv"
+
 
 env_path = os.getenv("WFP_CSV_PATH", "").strip()
 if env_path:
