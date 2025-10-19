@@ -13,6 +13,37 @@ st.caption(
     "Expected columns (case/spacing tolerant): "
     "`district, tier, attempts, target_doors, 1, 2, 3, 4, 5`."
 )
+# --- add these near your other paths ---
+NATE_CSV = (APP_DIR / "dashboard_wfp_nate.csv") if (APP_DIR / "dashboard_wfp_nate.csv").exists() \
+           else (APP_DIR.parent / "dashboard_wfp_nate.csv")
+
+@st.cache_data
+def load_precincts_csv_generic(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Nate race CSV not found at '{path}'. Commit 'dashboard_wfp_nate.csv' "
+            "to the repo (root or next to the app)."
+        )
+    df = pd.read_csv(path)
+    # normalize headers + coerce
+    df.columns = (df.columns.astype(str).str.strip()
+                              .str.replace("\uFEFF", "", regex=True)
+                              .str.lower().str.replace(" ", "_"))
+    required = ["precinct","attempts","target_doors","1","2","3","4","5"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"Nate CSV missing columns: {missing}")
+
+    def to_num(s: pd.Series) -> pd.Series:
+        return pd.to_numeric(s.astype(str).str.replace(",", "", regex=False).str.strip(), errors="coerce")
+
+    df["precinct"]     = df["precinct"].astype("string").str.strip()
+    df["attempts"]     = to_num(df["attempts"]).astype("Int64")
+    df["target_doors"] = to_num(df["target_doors"]).astype("Int64")
+    for c in ["1","2","3","4","5"]:
+        df[c] = to_num(df[c]).astype("Int64")
+    df["penetration"]  = (df["attempts"] / df["target_doors"]).replace([np.inf,-np.inf], np.nan).clip(upper=1.0)
+    return df
 
 APP_DIR = Path(__file__).resolve().parent
 DEFAULT_NAME = "dashboard_wfp_template.csv"
