@@ -132,6 +132,62 @@ summary = (
 )
 st.dataframe(summary, use_container_width=True)
 
+tab_districts, tab_precincts, tab_nate = st.tabs(["🏙️ Districts", "🗺️ Precincts (Other Race)", "🗂️ Precincts — Nate Race"])
+
+with tab_nate:
+    try:
+        df_n = load_precincts_csv_generic(NATE_CSV)
+    except Exception as e:
+        st.error(str(e))
+        st.info("Tip: add 'dashboard_wfp_nate.csv' at the repo root (or next to this app).")
+        st.stop()
+
+    # order precincts: keep whatever’s in the file
+    opts = df_n["precinct"].dropna().astype(str).unique().tolist()
+    with st.sidebar:
+        st.header("Filters — Nate Race")
+        sel_precincts = st.multiselect("Precincts", options=opts, default=opts, key="nate_precincts")
+        comp_thresh_n = st.slider("Completion threshold (penetration)", 0.0, 1.0, 0.8, 0.05, key="thresh_nate")
+
+    fn = df_n[df_n["precinct"].isin(sel_precincts)].copy()
+    if fn.empty:
+        st.warning("No rows match your filters.")
+    else:
+        # KPIs
+        total_attempts = int(fn["attempts"].sum(skipna=True))
+        total_targets  = int(fn["target_doors"].sum(skipna=True))
+        avg_pen       = float(fn["penetration"].mean(skipna=True)) if not fn.empty else np.nan
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total Attempts", f"{total_attempts:,}")
+        c2.metric("Total Target Doors", f"{total_targets:,}")
+        c3.metric("Avg. Penetration", f"{avg_pen:.1%}" if pd.notnull(avg_pen) else "—")
+
+        # Table
+        st.markdown("### Precinct Summary — Nate")
+        tbl = (
+            fn.sort_values("precinct")
+              .assign(penetration_pct=(fn["penetration"]*100).round(1).astype(str) + "%",
+                      status=np.where(fn["penetration"] >= comp_thresh_n, "Complete", "In Progress"))
+              [["precinct","attempts","target_doors","penetration_pct","status","1","2","3","4","5"]]
+              .rename(columns={"1":"SID 1","2":"SID 2","3":"SID 3","4":"SID 4","5":"SID 5"})
+        )
+        st.dataframe(tbl, use_container_width=True)
+
+        # Chart
+        st.markdown("### Support Distribution (1–5) — Nate")
+        melt = fn.melt(id_vars=["precinct"], value_vars=["1","2","3","4","5"],
+                       var_name="SID", value_name="count").fillna(0)
+        pivot = melt.pivot_table(index="precinct", columns="SID", values="count", aggfunc="sum").fillna(0)
+        st.bar_chart(pivot)
+
+        # Downloads
+        st.download_button(
+            "Download Nate Precinct Summary (CSV)",
+            data=tbl.to_csv(index=False).encode("utf-8"),
+            file_name="wfp_nate_precinct_summary.csv",
+            mime="text/csv"
+        )
+
 st.markdown("### Support Distribution (1–5)")
 support_melt = f.melt(id_vars=["district"], value_vars=["1","2","3","4","5"], var_name="SID", value_name="count").fillna(0)
 pivot = support_melt.pivot_table(index="district", columns="SID", values="count", aggfunc="sum").fillna(0)
