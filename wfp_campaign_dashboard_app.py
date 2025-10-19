@@ -181,6 +181,16 @@ with tab_districts:
 
 # --- Tab 2: Precincts — Nate Race (NO tiers) ---------------------------------
 with tab_nate:
+    # inside: with tab_nate:
+opts = df_n["precinct"].dropna().astype(str).unique().tolist()
+
+with st.sidebar:
+    st.header("Filters — Precincts (Nate Race)")
+    sel_nate = st.multiselect("Precincts", options=opts, default=opts, key="n_precincts")
+    comp_thresh_n = st.slider("Completion threshold (penetration)", 0.0, 1.0, 0.8, 0.05, key="n_thresh")
+
+fn = df_n[df_n["precinct"].isin(sel_nate)].copy()
+
     try:
         df_n = load_precincts_csv(NATE_CSV)
     except Exception as e:
