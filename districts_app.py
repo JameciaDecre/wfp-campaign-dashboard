@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-st.set_page_config(page_title="WFP Campaign — Districts", layout="wide")
+st.set_page_config(page_title="Rohit - Districts", layout="wide")
 st.title("WFP Campaign — Districts")
 
 # ---------------- file location ----------------
