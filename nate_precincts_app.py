@@ -288,4 +288,14 @@ st.download_button(
 
 clean_cols = ["__precinct_display", attempts_metric]
 if "target_doors" in f.columns:
-    clean_cols.append("target_
+    clean_cols.append("target_doors")
+clean_cols += sids
+clean_export = f[clean_cols].rename(columns={"__precinct_display": "precinct"})
+st.download_button(
+    "Download Cleaned Source (CSV)",
+    data=clean_export.to_csv(index=False).encode("utf-8"),
+    file_name="wfp_nate_cleaned_source.csv",
+    mime="text/csv"
+)
+
+st.caption(f"Reading Nate data from: {NATE_CSV}")
