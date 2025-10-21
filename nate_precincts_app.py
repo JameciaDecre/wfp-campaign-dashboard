@@ -3,12 +3,13 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import re
 
 st.set_page_config(page_title="WFP — Precincts (Nate Race)", layout="wide")
 st.title("WFP Campaign — Precincts (Nate Race)")
 
 # ------------------------------------------------------------
-# File resolution (next to app, then repo root)
+# File resolution
 # ------------------------------------------------------------
 APP_DIR = Path(__file__).resolve().parent
 
@@ -30,23 +31,49 @@ def normalize_headers(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = (
         df.columns.astype(str)
-        .str.strip()
+        .strip()
         .str.replace("\uFEFF", "", regex=True)
         .str.lower()
         .str.replace(" ", "_")
     )
+    # Broad alias map so common headings are understood
     alias = {
+        # target doors
         "targetdoors": "target_doors",
         "targets": "target_doors",
         "door_targets": "target_doors",
+
+        # precinct identifiers
         "precinctcode": "precinct",
         "precinct_code": "precinct",
         "precinctid": "precinct_id",
         "precinctname": "precinct_name",
+
+        # attempts (phones)
         "phone": "phone_attempts",
+        "phones": "phone_attempts",
+        "phone_calls": "phone_attempts",
         "calls": "phone_attempts",
-        "text": "text_attempts",
+        "dials": "phone_attempts",
+        "dial_attempts": "phone_attempts",
+
+        # attempts (doors)
         "door": "door_attempts",
+        "doors": "door_attempts",
+        "knocks": "door_attempts",
+        "knock_attempts": "door_attempts",
+        "canvass": "door_attempts",
+
+        # attempts (texts)
+        "text": "text_attempts",
+        "texts": "text_attempts",
+        "sms": "text_attempts",
+
+        # generic total/versus
+        "total": "total_attempts",
+        "versus": "versus_attempts",
+
+        # support IDs
         "sid_1": "1", "sid1": "1",
         "sid_2": "2", "sid2": "2",
         "sid_3": "3", "sid3": "3",
@@ -72,15 +99,65 @@ def pick_display_precinct(df: pd.DataFrame) -> pd.Series:
         return df[fallback].astype("string").str.strip()
     return pd.Series([f"Precinct {i+1}" for i in range(len(df))], index=df.index, dtype="string")
 
-def available_support_columns(df: pd.DataFrame) -> list:
-    return [c for c in ["1", "2", "3", "4", "5"] if c in df.columns]
+def pretty_attempt_label(col: str) -> str:
+    labels = {
+        "attempts": "Attempts (All)",
+        "phone_attempts": "Phone Attempts",
+        "door_attempts": "Door Attempts",
+        "text_attempts": "Text Attempts",
+        "total_attempts": "Total Attempts",
+        "versus_attempts": "Versus",
+    }
+    return labels.get(col, col.replace("_", " ").title())
 
-def available_attempt_metrics(df: pd.DataFrame) -> list:
-    candidates = []
-    for c in ["attempts", "phone_attempts", "door_attempts", "text_attempts", "total_attempts"]:
-        if c in df.columns:
-            candidates.append(c)
-    return candidates
+def find_attempt_metrics(df: pd.DataFrame) -> list:
+    """
+    Collects all reasonable attempt-like columns.
+    Includes canonical names and flexible matches such as 'phones','doors','versus','dials', etc.
+    """
+    cols = df.columns.tolist()
+    candidates = set()
+
+    # Canonical names
+    canonical = ["attempts", "phone_attempts", "door_attempts", "text_attempts", "total_attempts", "versus_attempts"]
+    for c in canonical:
+        if c in cols:
+            candidates.add(c)
+
+    # Flexible pattern matches (post-normalization)
+    patterns = {
+        "phone_attempts": r"(phone|phones|call|calls|dial|dials)",
+        "door_attempts":  r"(door|doors|knock|knocks|canvass)",
+        "text_attempts":  r"(text|texts|sms)",
+        "total_attempts": r"(total)",
+        "versus_attempts": r"(versus)"
+    }
+    for col in cols:
+        # skip obviously non-metrics
+        if col in ["precinct", "precinct_id", "precinct_name", "target_doors", "1", "2", "3", "4", "5", "__precinct_display"]:
+            continue
+        # already canonical? we have it
+        if col in candidates:
+            continue
+        for canon, pat in patterns.items():
+            if re.search(pat, col):
+                candidates.add(canon)
+
+    # If nothing else, include 'attempts' if present
+    if not candidates and "attempts" in cols:
+        candidates.add("attempts")
+
+    # Return in preferred order if present
+    order = ["phone_attempts", "door_attempts", "text_attempts", "attempts", "total_attempts", "versus_attempts"]
+    out = [c for c in order if c in candidates]
+    # plus any extras
+    for c in sorted(candidates):
+        if c not in out:
+            out.append(c)
+    return out
+
+def support_cols(df: pd.DataFrame) -> list:
+    return [c for c in ["1", "2", "3", "4", "5"] if c in df.columns]
 
 # ------------------------------------------------------------
 # Loader
@@ -91,13 +168,19 @@ def load_precincts(path: Path) -> pd.DataFrame:
         raise FileNotFoundError(f"CSV not found at '{path}'. Commit 'dashboard_wfp_nate.csv' next to this app or at repo root.")
     df = pd.read_csv(path)
     df = normalize_headers(df)
-    for col in ["attempts", "phone_attempts", "door_attempts", "text_attempts", "total_attempts", "target_doors", "1", "2", "3", "4", "5"]:
+
+    # Numeric coercions on any known metric / target / SID
+    num_candidates = ["attempts", "phone_attempts", "door_attempts", "text_attempts", "total_attempts", "versus_attempts", "target_doors", "1", "2", "3", "4", "5"]
+    for col in num_candidates:
         if col in df.columns:
             df[col] = to_num(df[col]).astype("Float64")
+
     df["__precinct_display"] = pick_display_precinct(df)
-    metrics = available_attempt_metrics(df)
+
+    metrics = find_attempt_metrics(df)
     if not metrics:
-        raise ValueError("No attempts metric found. Include one of: attempts, phone_attempts, door_attempts, text_attempts, total_attempts.")
+        raise ValueError("No attempts-like metric found. Add one of: attempts, phones, phone_calls, doors, knocks, texts, total, versus.")
+
     return df
 
 # ------------------------------------------------------------
@@ -113,26 +196,37 @@ except Exception as e:
 
 with st.sidebar:
     st.header("Filters & Settings — Precincts (Nate)")
-    metric_options = available_attempt_metrics(df)
-    default_metric = "phone_attempts" if "phone_attempts" in metric_options else ("attempts" if "attempts" in metric_options else metric_options[0])
-    attempts_metric = st.selectbox("Attempts metric", options=metric_options, index=metric_options.index(default_metric))
+    metric_options = find_attempt_metrics(df)
+    # default preference: phone -> attempts -> door -> text -> total -> versus
+    pref = ["phone_attempts", "attempts", "door_attempts", "text_attempts", "total_attempts", "versus_attempts"]
+    default_metric = next((m for m in pref if m in metric_options), metric_options[0])
+    display_options = [pretty_attempt_label(m) for m in metric_options]
+    selected_label = st.selectbox("Attempts metric", options=display_options, index=display_options.index(pretty_attempt_label(default_metric)))
+    # map back to column key
+    label_to_col = {pretty_attempt_label(m): m for m in metric_options}
+    attempts_metric = label_to_col[selected_label]
+
     precinct_opts = df["__precinct_display"].dropna().astype(str).unique().tolist()
     sel_precincts = st.multiselect("Precincts", options=sorted(precinct_opts), default=sorted(precinct_opts))
     comp_thresh = st.slider("Completion threshold (penetration)", 0.0, 1.0, 0.8, 0.05)
 
+# Filter
 f = df[df["__precinct_display"].isin(sel_precincts)].copy()
 if f.empty:
     st.warning("No rows match your filters.")
     st.stop()
 
+# Compute KPIs & penetration based on chosen metric
+f["__attempts"] = pd.to_numeric(f.get(attempts_metric, 0), errors="coerce").fillna(0)
+
 if "target_doors" in f.columns:
-    f["__attempts"] = f[attempts_metric].fillna(0)
-    f["__penetration"] = (f["__attempts"] / f["target_doors"].replace(0, np.nan)).replace([np.inf, -np.inf], np.nan).clip(upper=1.0)
+    denom = pd.to_numeric(f["target_doors"], errors="coerce").replace(0, np.nan)
+    f["__penetration"] = (f["__attempts"] / denom).replace([np.inf, -np.inf], np.nan).clip(upper=1.0)
 else:
-    f["__attempts"] = f[attempts_metric].fillna(0)
     f["__penetration"] = np.nan
 
-total_attempts = int(pd.to_numeric(f["__attempts"], errors="coerce").fillna(0).sum())
+# KPIs
+total_attempts = int(f["__attempts"].sum())
 c1, c2, c3 = st.columns(3)
 c1.metric("Total Attempts", f"{total_attempts:,}")
 
@@ -145,31 +239,29 @@ else:
     c2.metric("Total Target Doors", "—")
     c3.metric("Avg. Penetration", "—")
 
-st.caption(f"Attempts metric in use: {attempts_metric}")
+st.caption(f"Attempts metric in use: {pretty_attempt_label(attempts_metric)}")
 
-cols_base = ["__precinct_display", "__attempts"]
+# Summary table
+base_cols = ["__precinct_display", "__attempts"]
 if "target_doors" in f.columns:
-    cols_base.append("target_doors")
+    base_cols.append("target_doors")
 
-sid_cols = available_support_columns(f)
-cols_sids = sid_cols.copy()
-
+sids = support_cols(f)
 if "target_doors" in f.columns:
     f["__penetration_pct"] = (f["__penetration"] * 100).round(1)
     f["__status"] = np.where(f["__penetration"] >= comp_thresh, "Complete", "In Progress")
-    cols_base.extend(["__penetration_pct", "__status"])
+    base_cols.extend(["__penetration_pct", "__status"])
 
-summary_cols = cols_base + cols_sids
+summary_cols = base_cols + sids
 summary = (
-    f.sort_values("__precinct_display")[summary_cols].rename(
-        columns={
-            "__precinct_display": "precinct",
-            "__attempts": "attempts",
-            "__penetration_pct": "penetration_pct",
-            "__status": "status",
-            "1": "SID 1", "2": "SID 2", "3": "SID 3", "4": "SID 4", "5": "SID 5"
-        }
-    )
+    f.sort_values("__precinct_display")[summary_cols]
+     .rename(columns={
+         "__precinct_display": "precinct",
+         "__attempts": "attempts",
+         "__penetration_pct": "penetration_pct",
+         "__status": "status",
+         "1": "SID 1", "2": "SID 2", "3": "SID 3", "4": "SID 4", "5": "SID 5"
+     })
 )
 
 if "penetration_pct" in summary.columns:
@@ -178,13 +270,15 @@ if "penetration_pct" in summary.columns:
 st.markdown("### Precinct Summary — Nate Race")
 st.dataframe(summary, use_container_width=True)
 
-if sid_cols:
+# Support chart (only if SIDs exist)
+if sids:
     st.markdown("### Support Distribution (1–5)")
-    melt = f.melt(id_vars=["__precinct_display"], value_vars=sid_cols, var_name="SID", value_name="count").fillna(0)
+    melt = f.melt(id_vars=["__precinct_display"], value_vars=sids, var_name="SID", value_name="count").fillna(0)
     pivot = melt.pivot_table(index="__precinct_display", columns="SID", values="count", aggfunc="sum").fillna(0)
     pivot.index.name = "precinct"
     st.bar_chart(pivot)
 
+# Downloads
 st.download_button(
     "Download Nate Precinct Summary (CSV)",
     data=summary.to_csv(index=False).encode("utf-8"),
@@ -192,16 +286,6 @@ st.download_button(
     mime="text/csv"
 )
 
-clean_export_cols = ["__precinct_display", attempts_metric]
+clean_cols = ["__precinct_display", attempts_metric]
 if "target_doors" in f.columns:
-    clean_export_cols.append("target_doors")
-clean_export_cols += sid_cols
-clean_export = f[clean_export_cols].rename(columns={"__precinct_display": "precinct"})
-st.download_button(
-    "Download Cleaned Source (CSV)",
-    data=clean_export.to_csv(index=False).encode("utf-8"),
-    file_name="wfp_nate_cleaned_source.csv",
-    mime="text/csv"
-)
-
-st.caption(f"Reading Nate data from: {NATE_CSV}")
+    clean_cols.append("target_
