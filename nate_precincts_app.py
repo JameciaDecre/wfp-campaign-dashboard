@@ -31,49 +31,35 @@ def normalize_headers(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = (
         df.columns.astype(str)
-        .strip()
-        .str.replace("\uFEFF", "", regex=True)
+        .str.replace("\uFEFF", "", regex=True)  # remove BOM if present
+        .str.strip()                            # ✅ use .str.strip(), not .strip()
         .str.lower()
         .str.replace(" ", "_")
     )
-    # Broad alias map so common headings are understood
     alias = {
-        # target doors
         "targetdoors": "target_doors",
         "targets": "target_doors",
         "door_targets": "target_doors",
-
-        # precinct identifiers
         "precinctcode": "precinct",
         "precinct_code": "precinct",
         "precinctid": "precinct_id",
         "precinctname": "precinct_name",
-
-        # attempts (phones)
         "phone": "phone_attempts",
         "phones": "phone_attempts",
         "phone_calls": "phone_attempts",
         "calls": "phone_attempts",
         "dials": "phone_attempts",
         "dial_attempts": "phone_attempts",
-
-        # attempts (doors)
         "door": "door_attempts",
         "doors": "door_attempts",
         "knocks": "door_attempts",
         "knock_attempts": "door_attempts",
         "canvass": "door_attempts",
-
-        # attempts (texts)
         "text": "text_attempts",
         "texts": "text_attempts",
         "sms": "text_attempts",
-
-        # generic total/versus
         "total": "total_attempts",
         "versus": "versus_attempts",
-
-        # support IDs
         "sid_1": "1", "sid1": "1",
         "sid_2": "2", "sid2": "2",
         "sid_3": "3", "sid3": "3",
